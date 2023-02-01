@@ -3,18 +3,29 @@ import matplotlib.pyplot as plt
 
 # Importing standard Qiskit libraries
 from qiskit import QuantumCircuit, transpile, Aer, IBMQ
-from qiskit.tools.jupyter import *
+#from qiskit.tools.jupyter import *
 from qiskit.visualization import *
-from ibm_quantum_widgets import *
-from qiskit.providers.aer import QasmSimulator
+#from ibm_quantum_widgets import *
+#from qiskit.providers.aer import QasmSimulator
 
 import numpy as np
 from scipy import stats
 from scipy.optimize import curve_fit
 from scipy import stats
 from scipy import special
+from scipy import interpolate
+from qiskit.circuit.library import ZZFeatureMap
+from qiskit.circuit.library import RealAmplitudes
+from qiskit.algorithms.optimizers import COBYLA
+from qiskit_aer import AerSimulator
+from qiskit.utils import QuantumInstance
+from qiskit.utils import algorithm_globals
+from matplotlib import pyplot as plt
+from IPython.display import clear_output
+import time
+from qiskit_machine_learning.algorithms import VQC
 
-
+file_path = "/home/zeevvladimir/Personal_Project/TNG300_RF_data-20221026T024254Z-001/TNG300_RF_data/"
 # this function takes the number of galaxies per halo (counts), masses of each halo that has at least one galaxy (masses) and masses of all host halos (which is to say big halos) regardless of whether or not they host one of our 8000 galaxies (all_masses). It then returns the HOD as well as the bin centers
 
 def get_hod(masses, counts, all_masses, std):
@@ -70,38 +81,35 @@ def get_hist_count(inds_top,sub_parent_id, sub_pos, group_mass, group_pos, N_hal
     
     return hist, bin_cents, count_halo
 
-    Group_M_Mean200_dm = np.load('new_Group_M_Mean200_dm.npy')
-GroupPos_dm = np.load('new_GroupPos_dm.npy')
-GroupConc_dm = np.load('new_GroupConc_dm.npy')
-GroupEnv_dm = np.load('new_GroupEnv_dm.npy')
-GroupEnvAnn_dm = np.load('new_GroupEnvAnn_dm.npy')
-GroupEnvTH_dm = np.load('new_GroupEnvTH_dm.npy') #already masked for Mhalo>1e11
-GroupSpin_dm = np.load('new_GroupSpin_dm.npy')
-GroupNsubs_dm = np.load('new_GroupNsubs_dm.npy')
-GroupVmaxRad_dm = np.load('new_GroupVmaxRad_dm.npy')
-Group_SubID_dm = np.load('new_Group_SubID_dm.npy') #suhalo ID's
-Group_Shear_dm = np.zeros((277481,20))
-Group_Shear_dm = np.load('new_Group_Shear_dm.npy') #already,masked for Mhalo>1e11
-SubVdisp_dm = np.load('new_SubVdisp_dm.npy')
-SubVmax_dm = np.load('new_SubVmax_dm.npy')
-SubGrNr_dm = np.load('new_SubGrNr_dm.npy') #Index into the Group table of the FOF host/parent of Subhalo
-SubhaloPos_dm = np.load('new_SubhaloPos_dm.npy')
-count_dm = np.load('new_count_dm.npy')
-cent_count_dm = np.load('new_cent_count_dm.npy')
+Group_M_Mean200_dm = np.load(file_path + 'new_Group_M_Mean200_dm.npy')
+GroupPos_dm = np.load(file_path + 'new_GroupPos_dm.npy')
+GroupConc_dm = np.load(file_path + 'new_GroupConc_dm.npy')
+GroupEnv_dm = np.load(file_path + 'new_GroupEnv_dm.npy')
+GroupEnvAnn_dm = np.load(file_path + 'new_GroupEnvAnn_dm.npy')
+GroupEnvTH_dm = np.load(file_path + 'new_GroupEnvTH_dm.npy') #already masked for Mhalo>1e11
+GroupSpin_dm = np.load(file_path + 'new_GroupSpin_dm.npy')
+GroupNsubs_dm = np.load(file_path + 'new_GroupNsubs_dm.npy')
+GroupVmaxRad_dm = np.load(file_path + 'new_GroupVmaxRad_dm.npy')
+Group_SubID_dm = np.load(file_path + 'new_Group_SubID_dm.npy') #suhalo ID's
+Group_Shear_dm = np.load(file_path + 'new_Group_Shear_dm.npy') #already,masked for Mhalo>1e11
+SubVdisp_dm = np.load(file_path + 'new_SubVdisp_dm.npy')
+SubVmax_dm = np.load(file_path + 'new_SubVmax_dm.npy')
+SubGrNr_dm = np.load(file_path + 'new_SubGrNr_dm.npy') #Index into the Group table of the FOF host/parent of Subhalo
+SubhaloPos_dm = np.load(file_path + 'new_SubhaloPos_dm.npy')
+count_dm = np.load(file_path + 'new_count_dm.npy')
+cent_count_dm = np.load(file_path + 'new_cent_count_dm.npy')
 sat_count_dm = count_dm-cent_count_dm
-GroupEnvTH_1_3 = np.load('new_GroupEnvTH_1_3.npy') #env at 1.3 Mpc
-GroupEnvTH_2_5 = np.load('new_GroupEnvTH_2_5.npy')#env at 2.6 Mpc
+GroupEnvTH_1_3 = np.load(file_path + 'new_GroupEnvTH_1_3.npy') #env at 1.3 Mpc
+GroupEnvTH_2_5 = np.load(file_path + 'new_GroupEnvTH_2_5.npy')#env at 2.6 Mpc
 
 #mask off the lowest mass halos
 mass_mask = Group_M_Mean200_dm>1e11
-print(mass_mask.shape)
 
-from scipy import interpolate
 #Interpolate the shear at the radius of the halo using group shear file
 rEnv=np.logspace(np.log10(0.4),np.log10(10),20) #scales at which shear was calculated
-rad=(np.load('new_Group_R_Mean200_dm.npy')/1e3)[mass_mask] #halo radius
+rad=(np.load(file_path + 'new_Group_R_Mean200_dm.npy')/1e3)[mass_mask] #halo radius
 shear=np.zeros(len(rad))
-print(Group_Shear_dm.shape)
+
 for i in range(len(rad)):
     ShearFit=interpolate.InterpolatedUnivariateSpline(rEnv,Group_Shear_dm[i])
     shear[i]=ShearFit(1*rad[i])
@@ -247,40 +255,31 @@ hod_fit, bin_cents = get_hod(mass_test, fit_tot_counts, mass_test, std)
 hod_fit_sat, bin_cents = get_hod(mass_test, fit_sat_counts, mass_test, std)
 hod_fit_cent, bin_cents = get_hod(mass_test, fit_cent_counts, mass_test, std)
 
-plt.figure(figsize=(8,6))
-plt.plot(bin_cents, hod_true_tot,label='Total Subbox TNG Counts')
-plt.plot(bin_cents, hod_fit, linestyle = '--',label='HOD fit Total Counts')
-plt.plot(bin_cents, hod_true_sat, label='TNG contribution from satellites')
-plt.plot(bin_cents, hod_fit_sat, linestyle = '--',label='HOD fit sats')
-plt.plot(bin_cents, hod_true_cent, label='TNG contribution from centrals')
-plt.plot(bin_cents, hod_fit_cent, linestyle = '--',label='HOD fit centrals')
-plt.yscale('log')
-plt.xscale('log')
-plt.ylabel(r'$\langle N_\mathrm{gals} \rangle$')
-plt.xlabel(r'$M\ [h^{-1}M_\mathrm{halo}]$')
-plt.xlim(5e11,1e15)
-plt.ylim(0.01,30)
-plt.legend(fontsize='x-small');
+# plt.figure(figsize=(8,6))
+# plt.plot(bin_cents, hod_true_tot,label='Total Subbox TNG Counts')
+# plt.plot(bin_cents, hod_fit, linestyle = '--',label='HOD fit Total Counts')
+# plt.plot(bin_cents, hod_true_sat, label='TNG contribution from satellites')
+# plt.plot(bin_cents, hod_fit_sat, linestyle = '--',label='HOD fit sats')
+# plt.plot(bin_cents, hod_true_cent, label='TNG contribution from centrals')
+# plt.plot(bin_cents, hod_fit_cent, linestyle = '--',label='HOD fit centrals')
+# plt.yscale('log')
+# plt.xscale('log')
+# plt.ylabel(r'$\langle N_\mathrm{gals} \rangle$')
+# plt.xlabel(r'$M\ [h^{-1}M_\mathrm{halo}]$')
+# plt.xlim(5e11,1e15)
+# plt.ylim(0.01,30)
+# plt.legend(fontsize='x-small')
 
-from qiskit.circuit.library import ZZFeatureMap
 
 num_features = len(param_indices) 
 
 feature_map = ZZFeatureMap(feature_dimension=num_features, reps=1)
 feature_map.decompose().draw(output="mpl", fold=20)
 
-from qiskit.circuit.library import RealAmplitudes
-
 ansatz = RealAmplitudes(num_qubits=num_features, reps=3)
 ansatz.decompose().draw(output="mpl", fold=20)
 
-from qiskit.algorithms.optimizers import COBYLA
-
 optimizer = COBYLA(maxiter=100)
-
-from qiskit_aer import AerSimulator
-from qiskit.utils import QuantumInstance
-from qiskit.utils import algorithm_globals
 
 quantum_instance = QuantumInstance(
     AerSimulator(),
@@ -289,11 +288,8 @@ quantum_instance = QuantumInstance(
     seed_transpiler=algorithm_globals.random_seed,
 )
 
-from matplotlib import pyplot as plt
-from IPython.display import clear_output
-
 objective_func_vals = []
-plt.rcParams["figure.figsize"] = (12, 6)
+# plt.rcParams["figure.figsize"] = (12, 6)
 
 
 def callback_graph(weights, obj_func_eval):
@@ -303,7 +299,7 @@ def callback_graph(weights, obj_func_eval):
     plt.xlabel("Iteration")
     plt.ylabel("Objective function value")
     plt.plot(range(len(objective_func_vals)), objective_func_vals)
-    plt.show()
+    plt.draw()
 
 
 random_indices_train = np.random.randint(0,100000, (500))
@@ -312,8 +308,6 @@ print(X_train.shape)
 
 X_train = X_train[random_indices_train]
 y_train = y_train[random_indices_train]
-
-import time
 
 vqc = VQC(
     feature_map=feature_map,
@@ -330,8 +324,8 @@ vqc.fit(X_train, y_train)
 elapsed = time.time() - start
 
 print(f"Training time: {round(elapsed)} seconds")
-
-random_indices_test = np.random.randint(0,80000, (500))
+plt.show()
+random_indices_test = np.random.randint(0,80000, (5000))
 X_test = X_test[random_indices_test]
 y_test = y_test[random_indices_test]
 fit_tot_counts = fit_tot_counts[random_indices_test]
