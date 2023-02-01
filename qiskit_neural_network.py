@@ -1,58 +1,107 @@
-from locale import normalize
 import numpy as np
 import matplotlib.pyplot as plt
-import h5py
 
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn import metrics
-from scipy import interpolate
+# Importing standard Qiskit libraries
+from qiskit import QuantumCircuit, transpile, Aer, IBMQ
+from qiskit.tools.jupyter import *
+from qiskit.visualization import *
+from ibm_quantum_widgets import *
+from qiskit.providers.aer import QasmSimulator
+
+import numpy as np
+from scipy import stats
+from scipy.optimize import curve_fit
 from scipy import stats
 from scipy import special
 
 
-from qiskit import BasicAer
-from qiskit.circuit.library import ZFeatureMap
-from qiskit.utils import algorithm_globals
-from qiskit_machine_learning.kernels import QuantumKernel 
-from qiskit_machine_learning.algorithms import PegasosQSVC
+# this function takes the number of galaxies per halo (counts), masses of each halo that has at least one galaxy (masses) and masses of all host halos (which is to say big halos) regardless of whether or not they host one of our 8000 galaxies (all_masses). It then returns the HOD as well as the bin centers
 
-from sklearn.model_selection import train_test_split
-from qiskit.utils import algorithm_globals
-from sklearn.svm import SVC
+def get_hod(masses, counts, all_masses, std):
+    # number of bin edges
+    n_bins = 31
+   
+    # bin edges (btw Delta = np.log10(bins[1])-np.log10(bins[0]) in log space)
+    bins = np.logspace(10.,15.,n_bins)
+   
+    # bin centers
+    bin_cents = 0.5*(bins[1:]+bins[:-1])
+    
+    if std == True:
+        # This histogram tells you the standard deviation of halo masses in each bin interval (n_bins-1)
+        # This statstic function takes: variable to use for binning, variable to do statistics on
+        # so here we are binning according to masses and taking the standard deviation of the galaxy counts
+        hist_hod, edges, bin_number  = stats.binned_statistic(masses, counts, 'std', bins=bins)
+   
+    elif std == False:
+        # This histogram tells you how many halos there are in each bin inerval (n_bins-1)
+        hist_norm, edges = np.histogram(all_masses,bins=bins)
+        hist_weighted, edges = np.histogram(masses,bins=bins,weights=counts)
+        hist_hod = hist_weighted/hist_norm # to get average number of halo living in each bin
+    
+
+    return hist_hod, bin_cents
 
 
+def get_hist_count(inds_top,sub_parent_id, sub_pos, group_mass, group_pos, N_halos, std):
+    
+    # Find the halo ID's of the galaxies' halo parents in the original group_mass array
+    hosts_top = sub_parent_id[inds_top]
 
-file = '/home/zeevvladimir/Personal_Project/TNG300_RF_data-20221026T024254Z-001/TNG300_RF_data/'
-Group_M_Mean200_dm = np.load(file+'Group_M_Mean200_dm.npy')*1e10
-GroupPos_dm = np.load(file+'GroupPos_dm.npy')/1000
-GroupConc_dm = np.load(file+'GroupConc_dm.npy')
-GroupEnv_dm = np.load(file+'GroupEnv_dm.npy')
-GroupEnvAnn_dm = np.load(file+'GroupAnnEnv_R5_dm.npy')
-GroupEnvTH_dm = np.load(file+'GroupEnv_dm_TopHat_1e11mass.npy')[:,15] #already masked for Mhalo>1e11
-GroupSpin_dm = np.load(file+'GroupSpin_dm.npy')
-GroupNsubs_dm = np.load(file+'GroupNsubs_dm.npy')
-GroupVmaxRad_dm = np.load(file+'GroupVmaxRad_dm.npy')
-Group_SubID_dm = np.load(file+'GroupFirstSub_dm.npy') #suhalo ID's
-Group_Shear_dm = np.load(file+'GroupShear_qR_dm_1e11Mass.npy') #already,masked for Mhalo>1e11
-print(Group_Shear_dm.shape)
-SubVdisp_dm = np.load(file+'SubhaloVelDisp_dm.npy')
-SubVmax_dm = np.load(file+'SubhaloVmax_dm.npy')
-SubGrNr_dm = np.load(file+'SubhaloGrNr_dm.npy') #Index into the Group table of the FOF host/parent of Subhalo
-SubhaloPos_dm = np.load(file+'SubhaloPos_dm.npy')/1000
-count_dm = np.load(file+'GroupCountMass_dm.npy')
-cent_count_dm = np.load(file+'GroupCountCentMass_dm.npy')
+    # find the positions of the galaxies (i.e. the subhalos that we have decided to call "galaxies")
+    pos_top = sub_pos[inds_top]
+    
+    # Find the masses of their halo parents from the original group_mass array
+    masses_top = group_mass[hosts_top]
+    
+    # Knowing the ID's of the relevant halos (i.e. those who are hosting a galaxy),
+    # tell me which ID's are unique, what indices in the hosts_top array these
+    # unique ID's correspond to and how many times they each repeat
+    hosts, inds, gal_counts = np.unique(hosts_top,return_index=True,return_inverse=False, return_counts=True)
+
+    # get unique masses of hosts to compute the HOD (histogram of average occupation number as a function of mass)
+    host_masses = masses_top[inds]
+ 
+    hist, bin_cents = get_hod(host_masses,gal_counts,group_mass, std)
+
+    # get the galaxy counts per halo
+    count_halo = np.zeros(N_halos,dtype=int)
+    count_halo[hosts] += gal_counts
+    
+    return hist, bin_cents, count_halo
+
+    Group_M_Mean200_dm = np.load('new_Group_M_Mean200_dm.npy')
+GroupPos_dm = np.load('new_GroupPos_dm.npy')
+GroupConc_dm = np.load('new_GroupConc_dm.npy')
+GroupEnv_dm = np.load('new_GroupEnv_dm.npy')
+GroupEnvAnn_dm = np.load('new_GroupEnvAnn_dm.npy')
+GroupEnvTH_dm = np.load('new_GroupEnvTH_dm.npy') #already masked for Mhalo>1e11
+GroupSpin_dm = np.load('new_GroupSpin_dm.npy')
+GroupNsubs_dm = np.load('new_GroupNsubs_dm.npy')
+GroupVmaxRad_dm = np.load('new_GroupVmaxRad_dm.npy')
+Group_SubID_dm = np.load('new_Group_SubID_dm.npy') #suhalo ID's
+Group_Shear_dm = np.zeros((277481,20))
+Group_Shear_dm = np.load('new_Group_Shear_dm.npy') #already,masked for Mhalo>1e11
+SubVdisp_dm = np.load('new_SubVdisp_dm.npy')
+SubVmax_dm = np.load('new_SubVmax_dm.npy')
+SubGrNr_dm = np.load('new_SubGrNr_dm.npy') #Index into the Group table of the FOF host/parent of Subhalo
+SubhaloPos_dm = np.load('new_SubhaloPos_dm.npy')
+count_dm = np.load('new_count_dm.npy')
+cent_count_dm = np.load('new_cent_count_dm.npy')
 sat_count_dm = count_dm-cent_count_dm
-GroupEnvTH_1_3 = np.load(file+'GroupEnv_dm_TopHat_1e11mass.npy')[:,7] #env at 1.3 Mpc
-GroupEnvTH_2_5 = np.load(file+'GroupEnv_dm_TopHat_1e11mass.npy')[:,11] #env at 2.6 Mpc
+GroupEnvTH_1_3 = np.load('new_GroupEnvTH_1_3.npy') #env at 1.3 Mpc
+GroupEnvTH_2_5 = np.load('new_GroupEnvTH_2_5.npy')#env at 2.6 Mpc
 
 #mask off the lowest mass halos
 mass_mask = Group_M_Mean200_dm>1e11
+print(mass_mask.shape)
 
+from scipy import interpolate
 #Interpolate the shear at the radius of the halo using group shear file
 rEnv=np.logspace(np.log10(0.4),np.log10(10),20) #scales at which shear was calculated
-rad=(np.load(file+'Group_R_Mean200_dm.npy')/1e3)[mass_mask] #halo radius
+rad=(np.load('new_Group_R_Mean200_dm.npy')/1e3)[mass_mask] #halo radius
 shear=np.zeros(len(rad))
+print(Group_Shear_dm.shape)
 for i in range(len(rad)):
     ShearFit=interpolate.InterpolatedUnivariateSpline(rEnv,Group_Shear_dm[i])
     shear[i]=ShearFit(1*rad[i])
@@ -62,16 +111,12 @@ rEnv
 
 shear_1Mpc = Group_Shear_dm[:,7] # we also want shear value at approx at 1.3Mpc
 
-# create group velocity dispersion and Vmax based on thos of most massive gal
-parents_Vdisp = SubVdisp_dm[Group_SubID_dm]
-parents_Vmax = SubVmax_dm[Group_SubID_dm]
-
 #create testing cube
 boxLen=137
 maskBox=GroupPos_dm[mass_mask][:,0]<boxLen
 maskBox*=GroupPos_dm[mass_mask][:,1]<boxLen
 maskBox*=GroupPos_dm[mass_mask][:,2]<boxLen
-
+print(maskBox.shape)
 
 #organize data for training/testing
 #features
@@ -89,10 +134,10 @@ spin_train = GroupSpin_dm[mass_mask][~maskBox]
 spin_test = GroupSpin_dm[mass_mask][maskBox]
 ngals_train = GroupNsubs_dm[mass_mask][~maskBox]
 ngals_test = GroupNsubs_dm[mass_mask][maskBox]
-vdisp_train = parents_Vdisp[mass_mask][~maskBox]
-vdisp_test = parents_Vdisp[mass_mask][maskBox]
-vmax_train = parents_Vmax[mass_mask][~maskBox]
-vmax_test = parents_Vmax[mass_mask][maskBox]
+#vdisp_train = parents_Vdisp[mass_mask][~maskBox]
+#vdisp_test = parents_Vdisp[mass_mask][maskBox]
+#vmax_train = parents_Vmax[mass_mask][~maskBox]
+#vmax_test = parents_Vmax[mass_mask][maskBox]
 vmax_rad_train = GroupVmaxRad_dm[mass_mask][~maskBox]
 vmax_rad_test = GroupVmaxRad_dm[mass_mask][maskBox]
 shear_train = shear[~maskBox]
@@ -127,8 +172,8 @@ train_params[:,6] = conc_train
 train_params[:,7] = shear_train
 train_params[:,8] = shear_1Mpc_train
 train_params[:,9] = spin_train
-train_params[:,10] = vmax_train
-train_params[:,11] = vdisp_train
+#train_params[:,10] = vmax_train
+#train_params[:,11] = vdisp_train
 
 test_params = np.zeros((mass_test.shape[0],n_params), dtype = np.float64)
 test_params[:,0] = mass_test
@@ -141,140 +186,170 @@ test_params[:,6] = conc_test
 test_params[:,7] = shear_test
 test_params[:,8] = shear_1Mpc_test
 test_params[:,9] = spin_test
-test_params[:,10] = vmax_test
-test_params[:,11] = vdisp_test
+#test_params[:,10] = vmax_test
+#test_params[:,11] = vdisp_test
 
 ## choose your paramter for training and testing
-param_indeces = [0, 2]
-X_test = test_params[:,param_indeces]
-X_train= train_params[:,param_indeces]
+param_indices = [0,9]
+X_train= train_params[:,param_indices]
+X_test = test_params[:,param_indices]
+print(X_train.shape)
+print(X_test.shape)
 
 y_train = counts_train
+print(y_train)
 y_test = counts_test
 
-#Classical ML
-# svc = SVC()
-# _ = svc.fit(X_train, y_train)
+def HODCent(mH,mMin,sigma):
+    out=1/2*(1.+special.erf((np.log10(mH)-mMin)/sigma))
+    #out=1/2*(1.+special.erf(((mH)-mMin)/sigma))
+    return(out)
 
-# train_score_c4 = svc.score(X_train, y_train)
-# test_score_c4 = svc.score(X_test, y_test)
+def HODSat(mH,mCut,m1,alpha):
+    mask=mH<=10**mCut
+    out=((mH-10**mCut)/(10**m1))**alpha
+    out[mask]=0.
+    return(out)
 
-# print(f"Classical SVC on the training dataset: {train_score_c4:.2f}")
-# print(f"Classical SVC on the test dataset:     {test_score_c4:.2f}")
- 
-X_test = X_test[:10,]
-X_train = X_train[:10,]
-y_test = y_test[:10,]
-y_train = y_train[:10,]
+# get the hod from TNG counts suing imported function
+std = False #we use std=True when we want the scatter within the bins
+hod_true_sat, bin_cents = get_hod(mass_test,sat_counts_test,mass_test, std)
+hod_true_cent, bin_cents = get_hod(mass_test,cent_counts_test,mass_test, std)
+hod_true_tot, bin_cents = get_hod(mass_test,counts_test,mass_test, std)
 
-print("X_test")
-print(X_test)
-print("X_train")
-print(X_train)
-print("y_test")
-print(y_test)
-print("y_train")
-print(y_train)
+nan_mask = np.logical_not(np.isnan(hod_true_sat))
 
-X_test = np.resize(X_test, (len(X_test),2))
-X_train = np.resize(X_train, (len(X_train),2))
-y_test = np.resize(y_test, (len(y_test),2))
-y_train = np.resize(y_train, (len(y_train),2))
+#fit the HODsat function
+sat_params, cov = curve_fit(HODSat, bin_cents[nan_mask],hod_true_sat[nan_mask], p0=[12.5,13.5,0.9])
+sat_params
 
-max_x_test = np.amax(X_test)
-min_x_test = np.amin(X_test)
-max_x_train = np.amax(X_train)
-min_x_train = np.amin(X_train)
-max_y_test = np.amax(y_test)
-min_y_test = np.amin(y_test)
-max_y_train = np.amax(y_train)
-min_y_train = np.amin(y_train)
+#adjust by hand if needed
+mH = mass_test
+mCut = 12.71
+m1 = 13.65
+alpha = 1  
 
-#scale all values so they are between -1 and 1
-for i in range(len(X_test)):    
-    X_test[i] = -1 + 2 * ((X_test[i] - min_x_test)/(max_x_test - min_x_test))
-    
-for i in range(len(X_train)):
-    X_train[i] = -1 + 2 * ((X_train[i] - min_x_train)/(max_x_train - min_x_train))
+fit_sat_counts = HODSat(mH,mCut,m1,alpha)
 
-# for i in range(len(y_test)):
-#     y_test[i] = -1 + 2 * ((y_test[i] - min_y_test)/(max_y_test - min_y_test))
+# adjust by hand if needed:
+sigma = 0.23 #np.round(cent_params[1],2)
+mMin = 12.7 #np.round(cent_params[0],2)
 
-# for i in range(len(y_train)):
-#     y_train[i] = -1 + 2 * ((y_train[i] - min_y_train)/(max_y_train - min_y_train))
-    
-# number of qubits is equal to the number of features
-# num_qubits = 2
+#fit the HODcent function
+cent_params, cov = curve_fit(HODCent, bin_cents[nan_mask],hod_true_cent[nan_mask], p0=[0.5,12.5])
+cent_params
 
-# # number of steps performed during the training procedure
-# tau = 100
+fit_cent_counts = HODCent(mass_test,mMin,sigma)
+fit_tot_counts = fit_cent_counts + fit_sat_counts
 
-# # regularization parameter
-# C = 1000
+#get fitted HODs
+hod_fit, bin_cents = get_hod(mass_test, fit_tot_counts, mass_test, std)
+hod_fit_sat, bin_cents = get_hod(mass_test, fit_sat_counts, mass_test, std)
+hod_fit_cent, bin_cents = get_hod(mass_test, fit_cent_counts, mass_test, std)
 
-# algorithm_globals.random_seed = 12345
+plt.figure(figsize=(8,6))
+plt.plot(bin_cents, hod_true_tot,label='Total Subbox TNG Counts')
+plt.plot(bin_cents, hod_fit, linestyle = '--',label='HOD fit Total Counts')
+plt.plot(bin_cents, hod_true_sat, label='TNG contribution from satellites')
+plt.plot(bin_cents, hod_fit_sat, linestyle = '--',label='HOD fit sats')
+plt.plot(bin_cents, hod_true_cent, label='TNG contribution from centrals')
+plt.plot(bin_cents, hod_fit_cent, linestyle = '--',label='HOD fit centrals')
+plt.yscale('log')
+plt.xscale('log')
+plt.ylabel(r'$\langle N_\mathrm{gals} \rangle$')
+plt.xlabel(r'$M\ [h^{-1}M_\mathrm{halo}]$')
+plt.xlim(5e11,1e15)
+plt.ylim(0.01,30)
+plt.legend(fontsize='x-small');
 
-# feature_map = ZFeatureMap(feature_dimension=num_qubits, reps=1)
+from qiskit.circuit.library import ZZFeatureMap
 
-# qkernel = QuantumKernel(feature_map=feature_map)
+num_features = len(param_indices) 
+
+feature_map = ZZFeatureMap(feature_dimension=num_features, reps=1)
+feature_map.decompose().draw(output="mpl", fold=20)
+
+from qiskit.circuit.library import RealAmplitudes
+
+ansatz = RealAmplitudes(num_qubits=num_features, reps=3)
+ansatz.decompose().draw(output="mpl", fold=20)
+
+from qiskit.algorithms.optimizers import COBYLA
+
+optimizer = COBYLA(maxiter=100)
+
+from qiskit_aer import AerSimulator
+from qiskit.utils import QuantumInstance
+from qiskit.utils import algorithm_globals
+
+quantum_instance = QuantumInstance(
+    AerSimulator(),
+    shots=1024,
+    seed_simulator=algorithm_globals.random_seed,
+    seed_transpiler=algorithm_globals.random_seed,
+)
+
+from matplotlib import pyplot as plt
+from IPython.display import clear_output
+
+objective_func_vals = []
+plt.rcParams["figure.figsize"] = (12, 6)
 
 
-# pegasos_qsvc = PegasosQSVC(quantum_kernel=qkernel, C=C, num_steps=tau)
+def callback_graph(weights, obj_func_eval):
+    clear_output(wait=True)
+    objective_func_vals.append(obj_func_eval)
+    plt.title("Objective function value against iteration")
+    plt.xlabel("Iteration")
+    plt.ylabel("Objective function value")
+    plt.plot(range(len(objective_func_vals)), objective_func_vals)
+    plt.show()
 
-# training
-# pegasos_qsvc.fit(X_train, y_train)
 
-# # testing
-# pegasos_score = pegasos_qsvc.score(X_test, y_test)
-# print(f"PegasosQSVC classification test score: {pegasos_score}")
+random_indices_train = np.random.randint(0,100000, (500))
+print(random_indices_train.shape)
+print(X_train.shape)
 
-# grid_step = 0.2
-# margin = 0.2
-# grid_x, grid_y = np.meshgrid(
-#     np.arange(-margin, np.pi + margin, grid_step), np.arange(-margin, np.pi + margin, grid_step)
-# )
+X_train = X_train[random_indices_train]
+y_train = y_train[random_indices_train]
 
-# meshgrid_features = np.column_stack((grid_x.ravel(), grid_y.ravel()))
-# meshgrid_colors = pegasos_qsvc.predict(meshgrid_features)
+import time
 
-# plt.figure(figsize=(5, 5))
-# meshgrid_colors = meshgrid_colors.reshape(grid_x.shape)
-# plt.pcolormesh(grid_x, grid_y, meshgrid_colors, cmap="RdBu", shading="auto")
+vqc = VQC(
+    feature_map=feature_map,
+    ansatz=ansatz,
+    optimizer=optimizer,
+    quantum_instance=quantum_instance,
+    callback=callback_graph,
+)
+# clear objective value history
+objective_func_vals = []
 
-# plt.scatter(
-#     X_train[:, 0][y_train == 0],
-#     X_train[:, 1][y_train == 0],
-#     marker="s",
-#     facecolors="w",
-#     edgecolors="r",
-#     label="A train",
-# )
-# plt.scatter(
-#     X_train[:, 0][y_train == 1],
-#     X_train[:, 1][y_train == 1],
-#     marker="o",
-#     facecolors="w",
-#     edgecolors="b",
-#     label="B train",
-# )
+start = time.time()
+vqc.fit(X_train, y_train)
+elapsed = time.time() - start
 
-# plt.scatter(
-#     X_test[:, 0][y_test == 0],
-#     X_test[:, 1][y_test == 0],
-#     marker="s",
-#     facecolors="r",
-#     edgecolors="r",
-#     label="A test",
-# )
-# plt.scatter(
-#     X_test[:, 0][y_test == 1],
-#     X_test[:, 1][y_test == 1],
-#     marker="o",
-#     facecolors="b",
-#     edgecolors="b",
-#     label="B test",
-# )
+print(f"Training time: {round(elapsed)} seconds")
 
-# plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0)
-# plt.title("Pegasos Classification")
-# plt.show()
+random_indices_test = np.random.randint(0,80000, (500))
+X_test = X_test[random_indices_test]
+y_test = y_test[random_indices_test]
+fit_tot_counts = fit_tot_counts[random_indices_test]
+
+train_score_q4 = vqc.score(X_train, y_train)
+test_score_q4 = vqc.score(X_test, y_test)
+
+print(f"Quantum VQC on the training dataset: {train_score_q4:.2f}")
+print(f"Quantum VQC on the test dataset:     {test_score_q4:.2f}")
+
+ypred = vqc.predict(X_test)
+
+x = np.linspace(np.min(y_test),np.max(y_test), 100)
+fig, ax = plt.subplots(1,1, figsize=(8,6))
+ax.scatter(y_test,ypred, label = '$\mathrm{VQC}$')
+ax.scatter(y_test,fit_tot_counts, label = '$\mathrm{HOD}$')
+ax.plot(x, x, linestyle='-', c='r')
+ax.set_xlabel(r'$\rm{TNG300}\ N_{\rm gals} $', fontsize = 20)
+ax.set_ylabel(r'$\rm{PREDICTED}\ N_{\rm gals} $', fontsize = 20)
+ax.set_title(r'$\rm{Prediction\ results\ |\ Subbox\ TNG300}$')
+plt.legend()
