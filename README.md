@@ -7,7 +7,7 @@ This project is intended to compare the effectiveness of quantum machine learnin
 Currently it works (but poorly) with training and testing scores of 0.5 and 0.44 respectively when trained with the mass, environment, shear, and spin of halo parameters. Several methods from Qiskit have been deprecated since I have worked on this project and there seem to be some clear areas of improvement.
 
 1. Small batch sizes.
-Due to limitations in the IBM Qiskit lab environment, small training and testing sets had to be used of around 500 data points for each parameter. This is out of tens of thousands of data points and can easily lead to the model not having an accurate prediction of what things should be based on its training.
+Due to limitations in the IBM Qiskit lab environment, small training and testing sets had to be used of around 500 data points for each parameter. This is out of hundreds of thousands of possible data points and can easily lead to the model not having an accurate prediction of what things should be based on its training.
 
 2. Only predicting whole integer values
 When comparing the VQC results to the HOD it is clear that VQC only predicts integer values when the random forest results and the accepted (HOD) values are not only integer values. Not entirely sure what the issue here is will have to look at the actual data or about how VQC makes predictions.
