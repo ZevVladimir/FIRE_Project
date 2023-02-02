@@ -3,8 +3,10 @@ import matplotlib.pyplot as plt
 
 # Importing standard Qiskit libraries
 from qiskit import QuantumCircuit, transpile, Aer, IBMQ
-#from qiskit.tools.jupyter import *
 from qiskit.visualization import *
+
+#These imports were used within the IBM environment and don't work here but aren't necessary
+#from qiskit.tools.jupyter import *
 #from ibm_quantum_widgets import *
 #from qiskit.providers.aer import QasmSimulator
 
@@ -25,8 +27,11 @@ from IPython.display import clear_output
 import time
 from qiskit_machine_learning.algorithms import VQC
 
+#path to data
 file_path = "/home/zeevvladimir/Personal_Project/TNG300_RF_data-20221026T024254Z-001/TNG300_RF_data/"
-# this function takes the number of galaxies per halo (counts), masses of each halo that has at least one galaxy (masses) and masses of all host halos (which is to say big halos) regardless of whether or not they host one of our 8000 galaxies (all_masses). It then returns the HOD as well as the bin centers
+
+# this function takes the number of galaxies per halo (counts), masses of each halo that has at least one galaxy (masses) and masses of all host halos
+# (which is to say big halos) regardless of whether or not they host one of our 8000 galaxies (all_masses). It then returns the HOD as well as the bin centers
 
 def get_hod(masses, counts, all_masses, std):
     # number of bin edges
@@ -124,7 +129,6 @@ boxLen=137
 maskBox=GroupPos_dm[mass_mask][:,0]<boxLen
 maskBox*=GroupPos_dm[mass_mask][:,1]<boxLen
 maskBox*=GroupPos_dm[mass_mask][:,2]<boxLen
-print(maskBox.shape)
 
 #organize data for training/testing
 #features
@@ -197,15 +201,15 @@ test_params[:,9] = spin_test
 #test_params[:,10] = vmax_test
 #test_params[:,11] = vdisp_test
 
-## choose your paramter for training and testing
-param_indices = [0,9]
+# choose your paramter for training and testing
+param_indices = [0,5,7,9]
 X_train= train_params[:,param_indices]
 X_test = test_params[:,param_indices]
-print(X_train.shape)
-print(X_test.shape)
+print("Train shape: " + str(X_train.shape))
+print(X_train)
+print("Test shape: " + str(X_test.shape))
 
 y_train = counts_train
-print(y_train)
 y_test = counts_test
 
 def HODCent(mH,mMin,sigma):
@@ -219,7 +223,7 @@ def HODSat(mH,mCut,m1,alpha):
     out[mask]=0.
     return(out)
 
-# get the hod from TNG counts suing imported function
+# get the hod from TNG counts using imported function
 std = False #we use std=True when we want the scatter within the bins
 hod_true_sat, bin_cents = get_hod(mass_test,sat_counts_test,mass_test, std)
 hod_true_cent, bin_cents = get_hod(mass_test,cent_counts_test,mass_test, std)
@@ -271,6 +275,7 @@ hod_fit_cent, bin_cents = get_hod(mass_test, fit_cent_counts, mass_test, std)
 # plt.legend(fontsize='x-small')
 
 
+#determine feature map, ansatz, and optimizer
 num_features = len(param_indices) 
 
 feature_map = ZZFeatureMap(feature_dimension=num_features, reps=1)
@@ -281,6 +286,7 @@ ansatz.decompose().draw(output="mpl", fold=20)
 
 optimizer = COBYLA(maxiter=100)
 
+#TODO replace with sampler
 quantum_instance = QuantumInstance(
     AerSimulator(),
     shots=1024,
@@ -289,7 +295,7 @@ quantum_instance = QuantumInstance(
 )
 
 objective_func_vals = []
-# plt.rcParams["figure.figsize"] = (12, 6)
+#plt.rcParams["figure.figsize"] = (12, 6)
 
 
 def callback_graph(weights, obj_func_eval):
@@ -301,14 +307,12 @@ def callback_graph(weights, obj_func_eval):
     plt.plot(range(len(objective_func_vals)), objective_func_vals)
     plt.draw()
 
-
+#choose a random amount of indices to use to train the model
 random_indices_train = np.random.randint(0,100000, (500))
-print(random_indices_train.shape)
-print(X_train.shape)
-
 X_train = X_train[random_indices_train]
 y_train = y_train[random_indices_train]
 
+#create the VQC model 
 vqc = VQC(
     feature_map=feature_map,
     ansatz=ansatz,
@@ -316,16 +320,20 @@ vqc = VQC(
     quantum_instance=quantum_instance,
     callback=callback_graph,
 )
+
 # clear objective value history
 objective_func_vals = []
 
+#train the model
 start = time.time()
+print("Starting")
 vqc.fit(X_train, y_train)
 elapsed = time.time() - start
-
 print(f"Training time: {round(elapsed)} seconds")
 plt.show()
-random_indices_test = np.random.randint(0,80000, (5000))
+
+
+random_indices_test = np.random.randint(0,80000, (500))
 X_test = X_test[random_indices_test]
 y_test = y_test[random_indices_test]
 fit_tot_counts = fit_tot_counts[random_indices_test]
@@ -338,6 +346,7 @@ print(f"Quantum VQC on the test dataset:     {test_score_q4:.2f}")
 
 ypred = vqc.predict(X_test)
 
+#graph the predictions of VQC for the number of galaxies
 x = np.linspace(np.min(y_test),np.max(y_test), 100)
 fig, ax = plt.subplots(1,1, figsize=(8,6))
 ax.scatter(y_test,ypred, label = '$\mathrm{VQC}$')
