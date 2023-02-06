@@ -23,3 +23,4 @@ However, disregarding these issues it isn't too difficult to get something just 
 
 ## References
 Ana Maria Delgado, Digvijay Wadekar, Boryana Hadzhiyska, Sownak Bose, Lars Hernquist, Shirley Ho, Modeling the galaxy–halo connection with machine learning, Monthly Notices of the Royal Astronomical Society, Volume 515, Issue 2, September 2022, Pages 2733–2746, https://doi.org/10.1093/mnras/stac1951
+VQC part based off of https://github.com/Qiskit/qiskit-machine-learning/blob/main/docs/tutorials/02a_training_a_quantum_model_on_a_real_dataset.ipynb
