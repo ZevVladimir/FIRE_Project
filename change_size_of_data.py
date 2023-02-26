@@ -1,6 +1,6 @@
 import numpy as np
 
-file = '/home/zeevvladimir/Personal_Project/TNG300_RF_data-20221026T024254Z-001/TNG300_RF_data/'
+file = '../Data/TNG300_RF_data/'
 Group_M_Mean200_dm = np.load(file+'Group_M_Mean200_dm.npy')*1e10
 print(Group_M_Mean200_dm.shape)
 Group_M_Mean200_dm = Group_M_Mean200_dm[:286378]

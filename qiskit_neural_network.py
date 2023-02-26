@@ -17,7 +17,7 @@ from scipy import stats
 from scipy import special
 from scipy import interpolate
 from qiskit.circuit.library import ZZFeatureMap
-from qiskit.circuit.library import RealAmplitudes
+from qiskit.circuit.library import RealAmplitudes, EfficientSU2
 from qiskit.algorithms.optimizers import COBYLA
 from qiskit_aer import AerSimulator
 from qiskit.utils import QuantumInstance
@@ -28,7 +28,7 @@ import time
 from qiskit_machine_learning.algorithms import VQC
 
 #path to data
-file_path = "/home/zeevvladimir/Personal_Project/TNG300_RF_data-20221026T024254Z-001/TNG300_RF_data/"
+file_path = "../Data/TNG300_RF_data/"
 
 # this function takes the number of galaxies per halo (counts), masses of each halo that has at least one galaxy (masses) and masses of all host halos
 # (which is to say big halos) regardless of whether or not they host one of our 8000 galaxies (all_masses). It then returns the HOD as well as the bin centers
@@ -294,21 +294,16 @@ quantum_instance = QuantumInstance(
     seed_transpiler=algorithm_globals.random_seed,
 )
 
-objective_func_vals = []
 #plt.rcParams["figure.figsize"] = (12, 6)
 
-
-def callback_graph(weights, obj_func_eval):
-    clear_output(wait=True)
+def callback(weights, obj_func_eval):
     objective_func_vals.append(obj_func_eval)
-    plt.title("Objective function value against iteration")
-    plt.xlabel("Iteration")
-    plt.ylabel("Objective function value")
-    plt.plot(range(len(objective_func_vals)), objective_func_vals)
-    plt.draw()
+    print(len(objective_func_vals))
+    #moved plotting to end so its not called every iteration and added iteration step counter
+    
 
-#choose a random amount of indices to use to train the model
-random_indices_train = np.random.randint(0,100000, (500))
+#choose 500 random indices to use to train the model
+random_indices_train = np.arange(500) #np.random.randint(0,100000, (500))
 X_train = X_train[random_indices_train]
 y_train = y_train[random_indices_train]
 
@@ -318,7 +313,7 @@ vqc = VQC(
     ansatz=ansatz,
     optimizer=optimizer,
     quantum_instance=quantum_instance,
-    callback=callback_graph,
+    callback=callback,
 )
 
 # clear objective value history
@@ -327,11 +322,16 @@ objective_func_vals = []
 #train the model
 start = time.time()
 print("Starting")
-vqc.fit(X_train, y_train)
+TRAINED_MODEL = vqc.fit(X_train, y_train)
+#wanted to see if taking output of vqc would be any different (it looks like it ends up having slightly different scores in the end)
 elapsed = time.time() - start
 print(f"Training time: {round(elapsed)} seconds")
-plt.show()
 
+plt.title("Objective function value against iteration")
+plt.xlabel("Iteration")
+plt.ylabel("Objective function value")
+plt.plot(range(len(objective_func_vals)), objective_func_vals)
+plt.show()
 
 random_indices_test = np.random.randint(0,80000, (500))
 X_test = X_test[random_indices_test]
@@ -340,9 +340,14 @@ fit_tot_counts = fit_tot_counts[random_indices_test]
 
 train_score_q4 = vqc.score(X_train, y_train)
 test_score_q4 = vqc.score(X_test, y_test)
+TRAIN_SCORE = TRAINED_MODEL.score(X_train, y_train)
+TEST_SCORE = TRAINED_MODEL.score(X_test, y_test)
 
 print(f"Quantum VQC on the training dataset: {train_score_q4:.2f}")
 print(f"Quantum VQC on the test dataset:     {test_score_q4:.2f}")
+
+print(f"[OUTPUT OF VQC] Quantum VQC on the training dataset: {TRAIN_SCORE:.2f}")
+print(f"[OUTPUT OF VQC] Quantum VQC on the test dataset:     {TEST_SCORE:.2f}")
 
 ypred = vqc.predict(X_test)
 
@@ -356,3 +361,4 @@ ax.set_xlabel(r'$\rm{TNG300}\ N_{\rm gals} $', fontsize = 20)
 ax.set_ylabel(r'$\rm{PREDICTED}\ N_{\rm gals} $', fontsize = 20)
 ax.set_title(r'$\rm{Prediction\ results\ |\ Subbox\ TNG300}$')
 plt.legend()
+plt.show()
