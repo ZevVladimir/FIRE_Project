@@ -12,7 +12,7 @@ from qiskit.visualization import *
 
 import numpy as np
 from scipy import stats
-from scipy.optimize import curve_fit
+#from scipy.optimize import curve_fit
 from scipy import stats
 from scipy import special
 from scipy import interpolate
@@ -23,17 +23,18 @@ from qiskit_aer import AerSimulator
 from qiskit.utils import QuantumInstance
 from qiskit.utils import algorithm_globals
 from matplotlib import pyplot as plt
-from IPython.display import clear_output
+#from IPython.display import clear_output
 import time
 from qiskit_machine_learning.algorithms import VQC
 import h5py
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_curve, auc
+import os
 
 #path to data
 file_path = "../Data/Higgs_data.h5"
 
-seed = 1234
-np.random.default_rng(seed=seed)
+
 
 def READ_LHC_DATA(file_path, event_count, param_indices):
     lhc_data = h5py.File(file_path,'r')
@@ -41,13 +42,19 @@ def READ_LHC_DATA(file_path, event_count, param_indices):
     targets = np.array(lhc_data["targets"][:event_count])  # signal events =1, background events =0
     return features, targets
 
+#currently changeable parameters
+seed = 1234
+np.random.default_rng(seed=seed)
 event_count = 500
-
 param_indices = np.arange(21,28) #28 features NOTE: check order to figure out what indicies are what parameters
+#order is likely: lepton pT, lepton eta, lepton phi, missing energy magnitude, 
+#missing energy phi, jet 1 pt, jet 1 eta, jet 1 phi, jet 1 b-tag, jet 2 pt,
+#jet 2 eta, jet 2 phi, jet 2 b-tag, jet 3 pt, jet 3 eta, jet 3 phi, jet 3 b-tag, 
+# jet 4 pt, jet 4 eta, jet 4 phi, jet 4 b-tag
+max_iterations = 50
 
 features, targets = READ_LHC_DATA(file_path, event_count, param_indices)
 features_train, features_test, targets_train, targets_test = train_test_split(features, targets, test_size = 0.50, random_state=seed)
-
 
 X_train= features_train
 X_test = features_test
@@ -55,8 +62,8 @@ print("Train shape: " + str(X_train.shape))
 print(X_train)
 print("Test shape: " + str(X_test.shape))
 
-Y_train = targets_train
-Y_test = targets_test
+Y_train = targets_train.flatten()
+Y_test = targets_test.flatten()
 
 num_features = len(param_indices) 
 
@@ -66,14 +73,19 @@ feature_map = ZZFeatureMap(feature_dimension=num_features, reps=1)
 ansatz = RealAmplitudes(num_qubits=num_features, reps=3)
 #ansatz.decompose().draw(output="mpl", fold=20)
 
-optimizer = COBYLA(maxiter=50)
+optimizer = COBYLA(maxiter=max_iterations)
+
+feature_map_type = str(type(feature_map))
+ansatz_type = str(type(ansatz))
+optimizer_type = str(type(ansatz))
+
 
 #TODO replace with sampler
 quantum_instance = QuantumInstance(
     AerSimulator(),
     shots=1024,
-    seed_simulator=algorithm_globals.random_seed,
-    seed_transpiler=algorithm_globals.random_seed,
+    seed_simulator=seed,
+    seed_transpiler=seed,
 )
 
 #plt.rcParams["figure.figsize"] = (12, 6)
@@ -96,6 +108,7 @@ def callback(weights, obj_func_eval):
 vqc = VQC(
     feature_map=feature_map,
     ansatz=ansatz,
+    loss='cross_entropy_sigmoid',
     optimizer=optimizer,
     quantum_instance=quantum_instance,
     callback=callback,
@@ -114,11 +127,13 @@ TRAINED_MODEL = vqc.fit(X_train, Y_train)
 elapsed = time.time() - start
 print(f"Training time: {round(elapsed)} seconds")
 
+plt.figure(1)
 plt.title("Objective function value against iteration")
 plt.xlabel("Iteration")
-plt.ylabel("Objective function value")
+plt.ylabel("Objective function value (Loss)")
 plt.plot(range(len(objective_func_vals)), objective_func_vals)
 plt.show()
+plt.close()
 
 #random_indices_test = np.random.randint(0,X_train.shape[0], (500))
 #X_test = X_test[random_indices_test]
@@ -135,15 +150,38 @@ print(f"Quantum VQC on the test dataset:     {test_score_q4:.2f}")
 print(f"[OUTPUT OF VQC] Quantum VQC on the training dataset: {TRAIN_SCORE:.2f}")
 print(f"[OUTPUT OF VQC] Quantum VQC on the test dataset:     {TEST_SCORE:.2f}")
 
+#only 1 or 0 to indicate signal or background respectively
 ypred = vqc.predict(X_test)
 
-#graph the predictions of VQC
-#x = np.linspace(np.min(Y_test),np.max(Y_test), 100)
-#fig, ax = plt.subplots(1,1, figsize=(8,6))
-#ax.scatter(Y_test,ypred, label = '$\mathrm{VQC}$')
-#ax.plot(x, x, linestyle='-', c='r')
-#ax.set_xlabel(r'$\rm{TNG300}\ N_{\rm gals} $', fontsize = 20)
-#ax.set_ylabel(r'$\rm{PREDICTED}\ N_{\rm gals} $', fontsize = 20)
-#ax.set_title(r'$\rm{Prediction\ results\ |\ Subbox\ TNG300}$')
-#plt.legend()
-#plt.show()
+labels = ['Background', 'Signal']
+colors = ['black', 'lime']
+plt.figure(2) 
+plt.subplot(211) 
+#masking test values where prediction is indicated signal/background
+signal = np.int_(ypred)
+n, bins, patches = plt.hist(X_test[signal,0],60, histtype='step', color=colors[0], label=labels[0]) # 30 patches (bins) for 20k events/rows, plot first feature, 0, which is lepton pT
+n, bins, patches = plt.hist(X_test[~signal,0],60, histtype='step', color=colors[1], label=labels[1]) # same for signal events
+plt.title('Shallow Discriminator')
+plt.legend()
+plt.subplot(212) 
+n, bins, patches = plt.hist(X_test[signal,0],30, histtype='step', color=colors[0], label=labels[0], range=(0.97, 1.0), log=True)
+n, bins, patches = plt.hist(X_test[~signal,0],30, histtype='step', color=colors[1], label=labels[1], range=(0.97, 1.0), log=True)
+plt.title('Shallow Discriminator')
+plt.legend()
+plt.show()
+plt.close()
+
+fpr, tpr, _ = roc_curve(X_test, ypred)
+
+auc_roc = auc(fpr, tpr)
+
+plt.figure(3,figsize=(6,6))
+plt.plot(tpr, 1.0-fpr, lw=3, alpha=0.8,
+        label="Shallow (AUC={:.3f})".format(auc_roc))
+plt.xlabel("Signal efficiency")
+plt.ylabel("Background rejection")
+plt.legend(loc=3)
+plt.xlim((0.0, 1.0))
+plt.ylim((0.0, 1.0))
+plt.show()
+plt.close()
