@@ -45,13 +45,13 @@ def READ_LHC_DATA(file_path, event_count, param_indices):
 #currently changeable parameters
 seed = 1234
 np.random.default_rng(seed=seed)
-event_count = 500
-param_indices = np.arange(21,28) #28 features NOTE: check order to figure out what indicies are what parameters
+event_count = 1000
+param_indices = np.arange(4) #28 features NOTE: check order to figure out what indicies are what parameters
 #order is likely: lepton pT, lepton eta, lepton phi, missing energy magnitude, 
 #missing energy phi, jet 1 pt, jet 1 eta, jet 1 phi, jet 1 b-tag, jet 2 pt,
 #jet 2 eta, jet 2 phi, jet 2 b-tag, jet 3 pt, jet 3 eta, jet 3 phi, jet 3 b-tag, 
 # jet 4 pt, jet 4 eta, jet 4 phi, jet 4 b-tag
-max_iterations = 50
+max_iterations = 10
 
 features, targets = READ_LHC_DATA(file_path, event_count, param_indices)
 features_train, features_test, targets_train, targets_test = train_test_split(features, targets, test_size = 0.50, random_state=seed)
@@ -122,7 +122,7 @@ training_times = []
 start = time.time()
 training_times.append(start)
 print("Starting")
-TRAINED_MODEL = vqc.fit(X_train, Y_train)
+vqc.fit(X_train, Y_train)
 #wanted to see if taking output of vqc would be any different (it looks like it ends up having slightly different scores in the end)
 elapsed = time.time() - start
 print(f"Training time: {round(elapsed)} seconds")
@@ -141,14 +141,9 @@ plt.close()
 
 train_score_q4 = vqc.score(X_train, Y_train)
 test_score_q4 = vqc.score(X_test, Y_test)
-TRAIN_SCORE = TRAINED_MODEL.score(X_train, Y_train)
-TEST_SCORE = TRAINED_MODEL.score(X_test, Y_test)
 
 print(f"Quantum VQC on the training dataset: {train_score_q4:.2f}")
 print(f"Quantum VQC on the test dataset:     {test_score_q4:.2f}")
-
-print(f"[OUTPUT OF VQC] Quantum VQC on the training dataset: {TRAIN_SCORE:.2f}")
-print(f"[OUTPUT OF VQC] Quantum VQC on the test dataset:     {TEST_SCORE:.2f}")
 
 #only 1 or 0 to indicate signal or background respectively
 ypred = vqc.predict(X_test)
@@ -158,20 +153,20 @@ colors = ['black', 'lime']
 plt.figure(2) 
 plt.subplot(211) 
 #masking test values where prediction is indicated signal/background
-signal = np.int_(ypred)
-n, bins, patches = plt.hist(X_test[signal,0],60, histtype='step', color=colors[0], label=labels[0]) # 30 patches (bins) for 20k events/rows, plot first feature, 0, which is lepton pT
-n, bins, patches = plt.hist(X_test[~signal,0],60, histtype='step', color=colors[1], label=labels[1]) # same for signal events
-plt.title('Shallow Discriminator')
+signal = np.bool_(ypred)
+
+n, bins, patches = plt.hist(X_test[signal][:,0],60, histtype='step', color=colors[0], label=labels[0]) # 30 patches (bins) for 20k events/rows, plot first feature, 0, which is lepton pT
+n, bins, patches = plt.hist(X_test[~signal][:,0],60, histtype='step', color=colors[1], label=labels[1]) # same for signal events
+plt.title('Discriminator')
 plt.legend()
 plt.subplot(212) 
-n, bins, patches = plt.hist(X_test[signal,0],30, histtype='step', color=colors[0], label=labels[0], range=(0.97, 1.0), log=True)
-n, bins, patches = plt.hist(X_test[~signal,0],30, histtype='step', color=colors[1], label=labels[1], range=(0.97, 1.0), log=True)
-plt.title('Shallow Discriminator')
+n, bins, patches = plt.hist(X_test[signal][:,0],30, histtype='step', color=colors[0], label=labels[0], range=(0.97, 1.0), log=True)
+n, bins, patches = plt.hist(X_test[~signal][:,0],30, histtype='step', color=colors[1], label=labels[1], range=(0.97, 1.0), log=True)
 plt.legend()
 plt.show()
 plt.close()
 
-fpr, tpr, _ = roc_curve(X_test, ypred)
+fpr, tpr, _ = roc_curve(Y_test, ypred)
 
 auc_roc = auc(fpr, tpr)
 
