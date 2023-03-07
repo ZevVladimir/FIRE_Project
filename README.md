@@ -3,11 +3,12 @@
 1. Clone this repository. This has files that let you visualize the data (to some extent) in dataset.py and to download resized arrays to fit within Qiskit's requirements (not sure if this is necessary anymore, but does make the files smaller which is always nice for speed of loading especially since most data won't be used) in change_size_of_data.py
 2. Download the data from the Google Drive (in the QML Peer Leaders shared drive in /Ze'ev_Vladimir_QML_Project/Data/) which is all in np arrays
 3. Download the qiskit module if you are not doing this in IBM Qiskit lab. Should be an easy pip install qiskit but more details here: https://qiskit.org/documentation/getting_started.html
+4. pip install qiskit_machine_learning
 4. Otherwise will need numpy, matplotlib, and scipy which are easy to download
 5. Then you should be good to go!
 
-
-## Summary
+# TODO change summary to reflect VQR
+## Summary (Out of date since switch to VQR)
 This project is intended to compare the effectiveness of quantum machine learning to classical machine learning with cosmological data. To do so predictions made by the Halo Occupation Model (HOD) [which takes a halo’s mass to predict the number of galaxies in that halo] from Delgado et al. were used as a baseline to compare the predictions from Delgado et al.'s random forest model and the results Variational Quantum Classifier model from IBM's Qiskit predicted. The data used for both the training and testing of the models was also from Delgado et al.
 
 ## Current status and planned improvements
