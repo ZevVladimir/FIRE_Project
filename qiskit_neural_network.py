@@ -18,17 +18,18 @@ from scipy import special
 from scipy import interpolate
 from qiskit.circuit.library import ZZFeatureMap
 from qiskit.circuit.library import RealAmplitudes
-from qiskit.algorithms.optimizers import COBYLA
+from qiskit.algorithms.optimizers import COBYLA, L_BFGS_B
 from qiskit_aer import AerSimulator
 from qiskit.utils import QuantumInstance
 from qiskit.utils import algorithm_globals
 from matplotlib import pyplot as plt
 from IPython.display import clear_output
 import time
-from qiskit_machine_learning.algorithms import VQC
+from qiskit_machine_learning.algorithms.regressors import VQR
+from qiskit.circuit import Parameter
 
 #path to data
-file_path = "/home/zeevvladimir/Personal_Project/TNG300_RF_data-20221026T024254Z-001/TNG300_RF_data/"
+file_path = "/home/zvladimi/FIRE_Project/TNG300_RF_data/"
 
 # this function takes the number of galaxies per halo (counts), masses of each halo that has at least one galaxy (masses) and masses of all host halos
 # (which is to say big halos) regardless of whether or not they host one of our 8000 galaxies (all_masses). It then returns the HOD as well as the bin centers
@@ -88,19 +89,19 @@ def get_hist_count(inds_top,sub_parent_id, sub_pos, group_mass, group_pos, N_hal
 
 Group_M_Mean200_dm = np.load(file_path + 'new_Group_M_Mean200_dm.npy')
 GroupPos_dm = np.load(file_path + 'new_GroupPos_dm.npy')
-GroupConc_dm = np.load(file_path + 'new_GroupConc_dm.npy')
-GroupEnv_dm = np.load(file_path + 'new_GroupEnv_dm.npy')
-GroupEnvAnn_dm = np.load(file_path + 'new_GroupEnvAnn_dm.npy')
-GroupEnvTH_dm = np.load(file_path + 'new_GroupEnvTH_dm.npy') #already masked for Mhalo>1e11
-GroupSpin_dm = np.load(file_path + 'new_GroupSpin_dm.npy')
-GroupNsubs_dm = np.load(file_path + 'new_GroupNsubs_dm.npy')
-GroupVmaxRad_dm = np.load(file_path + 'new_GroupVmaxRad_dm.npy')
-Group_SubID_dm = np.load(file_path + 'new_Group_SubID_dm.npy') #suhalo ID's
+# GroupConc_dm = np.load(file_path + 'new_GroupConc_dm.npy')
+# GroupEnv_dm = np.load(file_path + 'new_GroupEnv_dm.npy')
+# GroupEnvAnn_dm = np.load(file_path + 'new_GroupEnvAnn_dm.npy')
+# GroupEnvTH_dm = np.load(file_path + 'new_GroupEnvTH_dm.npy') #already masked for Mhalo>1e11
+# GroupSpin_dm = np.load(file_path + 'new_GroupSpin_dm.npy')
+# GroupNsubs_dm = np.load(file_path + 'new_GroupNsubs_dm.npy')
+# GroupVmaxRad_dm = np.load(file_path + 'new_GroupVmaxRad_dm.npy')
+# Group_SubID_dm = np.load(file_path + 'new_Group_SubID_dm.npy') #suhalo ID's
 Group_Shear_dm = np.load(file_path + 'new_Group_Shear_dm.npy') #already,masked for Mhalo>1e11
-SubVdisp_dm = np.load(file_path + 'new_SubVdisp_dm.npy')
-SubVmax_dm = np.load(file_path + 'new_SubVmax_dm.npy')
-SubGrNr_dm = np.load(file_path + 'new_SubGrNr_dm.npy') #Index into the Group table of the FOF host/parent of Subhalo
-SubhaloPos_dm = np.load(file_path + 'new_SubhaloPos_dm.npy')
+# SubVdisp_dm = np.load(file_path + 'new_SubVdisp_dm.npy')
+# SubVmax_dm = np.load(file_path + 'new_SubVmax_dm.npy')
+# SubGrNr_dm = np.load(file_path + 'new_SubGrNr_dm.npy') #Index into the Group table of the FOF host/parent of Subhalo
+# SubhaloPos_dm = np.load(file_path + 'new_SubhaloPos_dm.npy')
 count_dm = np.load(file_path + 'new_count_dm.npy')
 cent_count_dm = np.load(file_path + 'new_cent_count_dm.npy')
 sat_count_dm = count_dm-cent_count_dm
@@ -134,32 +135,32 @@ maskBox*=GroupPos_dm[mass_mask][:,2]<boxLen
 #features
 mass_train = Group_M_Mean200_dm[mass_mask][~maskBox]
 mass_test = Group_M_Mean200_dm[mass_mask][maskBox]
-env_train = GroupEnv_dm[mass_mask][~maskBox]
-env_test = GroupEnv_dm[mass_mask][maskBox]
-envann_train = GroupEnvAnn_dm[mass_mask][~maskBox]
-envann_test = GroupEnvAnn_dm[mass_mask][maskBox]
-envth_train = GroupEnvTH_dm[~maskBox]
-envth_test = GroupEnvTH_dm[maskBox]
-conc_train = GroupConc_dm[mass_mask][~maskBox]
-conc_test = GroupConc_dm[mass_mask][maskBox]
-spin_train = GroupSpin_dm[mass_mask][~maskBox]
-spin_test = GroupSpin_dm[mass_mask][maskBox]
-ngals_train = GroupNsubs_dm[mass_mask][~maskBox]
-ngals_test = GroupNsubs_dm[mass_mask][maskBox]
-#vdisp_train = parents_Vdisp[mass_mask][~maskBox]
-#vdisp_test = parents_Vdisp[mass_mask][maskBox]
-#vmax_train = parents_Vmax[mass_mask][~maskBox]
-#vmax_test = parents_Vmax[mass_mask][maskBox]
-vmax_rad_train = GroupVmaxRad_dm[mass_mask][~maskBox]
-vmax_rad_test = GroupVmaxRad_dm[mass_mask][maskBox]
-shear_train = shear[~maskBox]
-shear_test = shear[maskBox]
-shear_1Mpc_train = shear_1Mpc[~maskBox]
-shear_1Mpc_test = shear_1Mpc[maskBox]
-envth_1Mpc_train = GroupEnvTH_1_3[~maskBox]
-envth_1Mpc_test = GroupEnvTH_1_3[maskBox]
-envth_2Mpc_train = GroupEnvTH_2_5[~maskBox]
-envth_2Mpc_test = GroupEnvTH_2_5[maskBox]
+# env_train = GroupEnv_dm[mass_mask][~maskBox]
+# env_test = GroupEnv_dm[mass_mask][maskBox]
+# envann_train = GroupEnvAnn_dm[mass_mask][~maskBox]
+# envann_test = GroupEnvAnn_dm[mass_mask][maskBox]
+# envth_train = GroupEnvTH_dm[~maskBox]
+# envth_test = GroupEnvTH_dm[maskBox]
+# conc_train = GroupConc_dm[mass_mask][~maskBox]
+# conc_test = GroupConc_dm[mass_mask][maskBox]
+# spin_train = GroupSpin_dm[mass_mask][~maskBox]
+# spin_test = GroupSpin_dm[mass_mask][maskBox]
+# ngals_train = GroupNsubs_dm[mass_mask][~maskBox]
+# ngals_test = GroupNsubs_dm[mass_mask][maskBox]
+# #vdisp_train = parents_Vdisp[mass_mask][~maskBox]
+# #vdisp_test = parents_Vdisp[mass_mask][maskBox]
+# #vmax_train = parents_Vmax[mass_mask][~maskBox]
+# #vmax_test = parents_Vmax[mass_mask][maskBox]
+# vmax_rad_train = GroupVmaxRad_dm[mass_mask][~maskBox]
+# vmax_rad_test = GroupVmaxRad_dm[mass_mask][maskBox]
+# shear_train = shear[~maskBox]
+# shear_test = shear[maskBox]
+# shear_1Mpc_train = shear_1Mpc[~maskBox]
+# shear_1Mpc_test = shear_1Mpc[maskBox]
+# envth_1Mpc_train = GroupEnvTH_1_3[~maskBox]
+# envth_1Mpc_test = GroupEnvTH_1_3[maskBox]
+# envth_2Mpc_train = GroupEnvTH_2_5[~maskBox]
+# envth_2Mpc_test = GroupEnvTH_2_5[maskBox]
 #labels
 #number of galaxy counts
 counts_train = count_dm[mass_mask][~maskBox]
@@ -175,34 +176,34 @@ cent_counts_test = cent_count_dm[mass_mask][maskBox]
 n_params=12
 train_params = np.zeros((mass_train.shape[0],n_params), dtype = np.float64)
 train_params[:,0] = mass_train
-train_params[:,1] = envann_train
-train_params[:,2] = envth_train
-train_params[:,3] = envth_1Mpc_train
-train_params[:,4] = envth_2Mpc_train
-train_params[:,5] = env_train #GS
-train_params[:,6] = conc_train
-train_params[:,7] = shear_train
-train_params[:,8] = shear_1Mpc_train
-train_params[:,9] = spin_train
+# train_params[:,1] = envann_train
+# train_params[:,2] = envth_train
+# train_params[:,3] = envth_1Mpc_train
+# train_params[:,4] = envth_2Mpc_train
+# train_params[:,5] = env_train #GS
+# train_params[:,6] = conc_train
+# train_params[:,7] = shear_train
+# train_params[:,8] = shear_1Mpc_train
+# train_params[:,9] = spin_train
 #train_params[:,10] = vmax_train
 #train_params[:,11] = vdisp_train
 
 test_params = np.zeros((mass_test.shape[0],n_params), dtype = np.float64)
 test_params[:,0] = mass_test
-test_params[:,1] = envann_test
-test_params[:,2] = envth_test
-test_params[:,3] = envth_1Mpc_test
-test_params[:,4] = envth_2Mpc_test
-test_params[:,5] = env_test
-test_params[:,6] = conc_test
-test_params[:,7] = shear_test
-test_params[:,8] = shear_1Mpc_test
-test_params[:,9] = spin_test
+# test_params[:,1] = envann_test
+# test_params[:,2] = envth_test
+# test_params[:,3] = envth_1Mpc_test
+# test_params[:,4] = envth_2Mpc_test
+# test_params[:,5] = env_test
+# test_params[:,6] = conc_test
+# test_params[:,7] = shear_test
+# test_params[:,8] = shear_1Mpc_test
+# test_params[:,9] = spin_test
 #test_params[:,10] = vmax_test
 #test_params[:,11] = vdisp_test
 
 # choose your paramter for training and testing
-param_indices = [0,5,7,9]
+param_indices = [0]
 X_train= train_params[:,param_indices]
 X_test = test_params[:,param_indices]
 print("Train shape: " + str(X_train.shape))
@@ -278,21 +279,19 @@ hod_fit_cent, bin_cents = get_hod(mass_test, fit_cent_counts, mass_test, std)
 #determine feature map, ansatz, and optimizer
 num_features = len(param_indices) 
 
-feature_map = ZZFeatureMap(feature_dimension=num_features, reps=1)
-feature_map.decompose().draw(output="mpl", fold=20)
+param_x = Parameter("x")
+feature_map = QuantumCircuit(1, name="fm")
+feature_map.ry(param_x, 0)
 
-ansatz = RealAmplitudes(num_qubits=num_features, reps=3)
-ansatz.decompose().draw(output="mpl", fold=20)
+param_y = Parameter("y")
+ansatz = QuantumCircuit(1, name="vf")
+ansatz.ry(param_y, 0)
 
-optimizer = COBYLA(maxiter=100)
+# construct a circuit
+qc = QuantumCircuit(1)
+qc.compose(feature_map, inplace=True)
+qc.compose(ansatz, inplace=True)
 
-#TODO replace with sampler
-quantum_instance = QuantumInstance(
-    AerSimulator(),
-    shots=1024,
-    seed_simulator=algorithm_globals.random_seed,
-    seed_transpiler=algorithm_globals.random_seed,
-)
 
 objective_func_vals = []
 #plt.rcParams["figure.figsize"] = (12, 6)
@@ -308,26 +307,27 @@ def callback_graph(weights, obj_func_eval):
     plt.draw()
 
 #choose a random amount of indices to use to train the model
-random_indices_train = np.random.randint(0,100000, (500))
+np.random.seed(53)
+random_indices_train = np.random.randint(0,y_train.size, (10000))
 X_train = X_train[random_indices_train]
 y_train = y_train[random_indices_train]
 
-#create the VQC model 
-vqc = VQC(
+vqr = VQR(
     feature_map=feature_map,
     ansatz=ansatz,
-    optimizer=optimizer,
-    quantum_instance=quantum_instance,
+    optimizer=L_BFGS_B(maxiter=5),
     callback=callback_graph,
 )
 
-# clear objective value history
 objective_func_vals = []
+plt.rcParams["figure.figsize"] = (12, 6)
 
 #train the model
 start = time.time()
 print("Starting")
-vqc.fit(X_train, y_train)
+print(X_train.shape)
+print(y_train.shape)
+vqr.fit(X_train, y_train)
 elapsed = time.time() - start
 print(f"Training time: {round(elapsed)} seconds")
 plt.show()
@@ -338,13 +338,20 @@ X_test = X_test[random_indices_test]
 y_test = y_test[random_indices_test]
 fit_tot_counts = fit_tot_counts[random_indices_test]
 
-train_score_q4 = vqc.score(X_train, y_train)
-test_score_q4 = vqc.score(X_test, y_test)
+# return to default figsize
+plt.rcParams["figure.figsize"] = (6, 4)
 
-print(f"Quantum VQC on the training dataset: {train_score_q4:.2f}")
-print(f"Quantum VQC on the test dataset:     {test_score_q4:.2f}")
+# score result
+vqr.score(X_test, y_test)
 
-ypred = vqc.predict(X_test)
+
+train_score_q4 = vqr.score(X_train, y_train)
+test_score_q4 = vqr.score(X_test, y_test)
+
+print(f"Quantum VQR on the training dataset: {train_score_q4:.2f}")
+print(f"Quantum VQR on the test dataset:     {test_score_q4:.2f}")
+
+ypred = vqr.predict(X_test)
 
 #graph the predictions of VQC for the number of galaxies
 x = np.linspace(np.min(y_test),np.max(y_test), 100)
@@ -356,3 +363,4 @@ ax.set_xlabel(r'$\rm{TNG300}\ N_{\rm gals} $', fontsize = 20)
 ax.set_ylabel(r'$\rm{PREDICTED}\ N_{\rm gals} $', fontsize = 20)
 ax.set_title(r'$\rm{Prediction\ results\ |\ Subbox\ TNG300}$')
 plt.legend()
+plt.show()
