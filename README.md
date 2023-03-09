@@ -1,11 +1,12 @@
 # Quantum Machine Learning for Modeling the Galaxy-Dark Matter Connection
 ## Setup
 1. Clone this repository. This has files that let you visualize the data (to some extent) in dataset.py and to download resized arrays to fit within Qiskit's requirements (not sure if this is necessary anymore, but does make the files smaller which is always nice for speed of loading especially since most data won't be used) in change_size_of_data.py
-2. Download the data from the Google Drive (in the QML Peer Leaders shared drive in /Ze'ev_Vladimir_QML_Project/Data/) which is all in np arrays
-3. Download the qiskit module if you are not doing this in IBM Qiskit lab. Should be an easy pip install qiskit but more details here: https://qiskit.org/documentation/getting_started.html
-4. pip install qiskit_machine_learning
-4. Otherwise will need numpy, matplotlib, and scipy which are easy to download
-5. Then you should be good to go!
+2. You will only have to use qiskit_neural_network as in the Google Drive (step 3) there are already np arrays. This file contains all the code to work with the cosmology data and get predictions from the HOD and then creates a VQR model and then plot the predictions from both of them.
+3. Download the data from the Google Drive (in the QML Peer Leaders shared drive in /Ze'ev_Vladimir_QML_Project/Data/) which is all in np arrays
+4. Download the qiskit module if you are not doing this in IBM Qiskit lab. Should be an easy pip install qiskit but more details here: https://qiskit.org/documentation/getting_started.html
+5. pip install qiskit_machine_learning
+6. Otherwise will need numpy, matplotlib, and scipy which are easy to download
+7. Then you should be good to go!
 
 # TODO change summary to reflect VQR
 ## Summary (Out of date since switch to VQR)
